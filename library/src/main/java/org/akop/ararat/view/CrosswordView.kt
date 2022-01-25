@@ -51,12 +51,10 @@ import org.akop.ararat.R
 import org.akop.ararat.core.Crossword
 import org.akop.ararat.core.CrosswordState
 import org.akop.ararat.util.*
-import org.akop.ararat.view.inputmethod.CrosswordInputConnection
 import org.akop.ararat.widget.Zoomer
 import java.lang.ref.WeakReference
+import java.util.*
 
-import java.util.HashSet
-import java.util.Stack
 import kotlin.math.absoluteValue
 
 
@@ -82,7 +80,7 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
     }
 
     private val defaultInputValidator: InputValidator = { ch ->
-        val upper = ch.toUpperCase()
+        val upper = ch.uppercase(Locale.ROOT)
         !(0..ch.length).any { !isAcceptableChar(upper[it]) }
     }
 
@@ -146,70 +144,6 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
     private val rendererLock = Any()
     private val inPlaceRenderer = Renderer(this)
 
-    private val inputEventListener = object : CrosswordInputConnection.OnInputEventListener {
-
-        override fun onWordEntered(text: CharSequence) {
-            val sel = selection ?: return
-
-            // Words like "ain't" contain punctuation marks that ain't
-            // valid, but may appear in a crossword in punctuation-less
-            // form. For this reason, we strip out invalid characters
-            // before considering whether we want to fill them into the
-            // selection.
-            val chars = text.toString().toCharArray()
-
-            // Copy all acceptable chars to a separate array
-            val filtered = arrayOfNulls<String>(chars.size)
-            var k = 0
-            for (ch in chars) {
-                if (isAcceptableChar(ch)) filtered[k++] = ch.toString()
-            }
-
-            // No valid chars
-            if (k == 0) {
-                return
-            }
-
-            val matrix: Array<Array<String?>>
-            if (sel.direction == Crossword.Word.DIR_ACROSS) {
-                matrix = Array(1) { arrayOfNulls<String?>(k) }
-                System.arraycopy(filtered, 0, matrix[0], 0, k)
-            } else {
-                matrix = Array(k) { arrayOfNulls<String?>(1) }
-                (0 until k).forEach { i -> matrix[i][0] = filtered[i] }
-            }
-
-            val s: Selectable? = when {
-                sel.isCellWithinBounds(sel.cell + k - 1) -> {
-                    // If there's enough room at the current position, add the new word
-                    setChars(sel.row, sel.column, matrix, false)
-                    Selectable(sel.word,
-                            minOf(sel.cell + k, sel.word.length - 1))
-                }
-                k == sel.word.length -> {
-                    // Not enough room from the current, but perfect fit for the entire row/col
-                    setChars(sel.getRow(0), sel.getColumn(0), matrix, false)
-                    Selectable(sel.word, k - 1)
-                }
-                else -> null
-            }
-
-            if (s != null) {
-                resetSelection(s)
-            }
-        }
-
-        override fun onWordCancelled() {
-            handleBackspace()
-        }
-
-        override fun onEditorAction(actionCode: Int) {
-            if (actionCode == EditorInfo.IME_ACTION_NEXT) {
-                selectNextWord()
-            }
-        }
-    }
-
     var skipOccupiedOnType: Boolean = true
     var skipCompletedWords: Boolean = true
     var selectFirstUnoccupiedOnNav: Boolean = true
@@ -254,6 +188,8 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
                                 i, j, cell.isFlagSet(Cell.FLAG_CHEATED))
                         state.setFlagAt(CrosswordState.FLAG_MARKED,
                                 i, j, cell.isFlagSet(Cell.FLAG_MARKED))
+                        state.setFlagAt(CrosswordState.FLAG_CHECKED,
+                                i, j, cell.isFlagSet(Cell.FLAG_CHECKED))
                     }
                 }
             }
@@ -512,15 +448,14 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
 
         return if (inputMode != INPUT_MODE_NONE) {
             outAttrs.actionLabel = null
-            outAttrs.inputType = InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            outAttrs.inputType = InputType.TYPE_NULL
             outAttrs.imeOptions = outAttrs.imeOptions or EditorInfo.IME_FLAG_NO_FULLSCREEN
             outAttrs.imeOptions = outAttrs.imeOptions or EditorInfo.IME_FLAG_NO_EXTRACT_UI
             outAttrs.imeOptions = outAttrs.imeOptions and EditorInfo.IME_MASK_ACTION.inv()
             outAttrs.imeOptions = outAttrs.imeOptions or EditorInfo.IME_ACTION_NEXT
             outAttrs.packageName = context.packageName
-
             CrosswordInputConnection(this).apply {
-                onInputEventListener = inputEventListener
+                //onInputEventListener = inputEventListener
             }
         } else {
             null
@@ -564,6 +499,16 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
 
     override fun onKey(v: View, keyCode: Int, event: KeyEvent): Boolean {
         var handled = false
+        if (event.action != KeyEvent.ACTION_UP) {
+            // We only look at ACTION_DOWN in this code, assuming that ACTION_UP is redundant.
+            // If not, adjust accordingly.
+            return false
+        } else if (event.unicodeChar ==
+            EditableAccomodatingLatinIMETypeNullIssues.ONE_UNPROCESSED_CHARACTER[0].code) {
+            // We are ignoring this character, and we want everyone else to ignore it, too, so
+            // we return true indicating that we have handled it (by ignoring it).
+            return true
+        }
         if (event.action == KeyEvent.ACTION_UP) {
             when (keyCode) {
                 KeyEvent.KEYCODE_SPACE -> {
@@ -733,6 +678,8 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
                             state.isFlagSet(CrosswordState.FLAG_CHEATED, i, j))
                     cell.setFlag(Cell.FLAG_MARKED,
                             state.isFlagSet(CrosswordState.FLAG_MARKED, i, j))
+                    cell.setFlag(Cell.FLAG_CHECKED,
+                            state.isFlagSet(CrosswordState.FLAG_CHECKED, i, j))
                     cell.setChar(state.charAt(i, j))
                     if (markerDisplayMode and MARKER_ERROR != 0) {
                         cell.markError(map[i][j]!!, revealSetsCheatFlag)
@@ -919,7 +866,7 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
             val changed = cell!!.char != sch && !cell.isFlagSet(Cell.FLAG_CHEATED)
 
             if (changed) {
-                undoBuffer.push(UndoItem(cell.char, row, col, selection))
+                //undoBuffer.push(UndoItem(cell.char, row, col, selection))
                 cell.setChar(sch)
                 clearCellCheck(cell)
                 resetSelection(nextSelectable(selection!!))
@@ -1094,6 +1041,8 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
                         }
                         if (setCheatFlag) {
                             vwCell.setFlag(Cell.FLAG_CHEATED, true)
+                            vwCell.setFlag(Cell.FLAG_CHECKED, false)
+                            vwCell.setFlag(Cell.FLAG_ERROR, false)
                         }
                         if (markerDisplayMode and MARKER_ERROR != 0) {
                             vwCell.markError(map[i][j]!!, revealSetsCheatFlag)

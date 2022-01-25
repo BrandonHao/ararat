@@ -34,6 +34,7 @@ class Crossword internal constructor(val width: Int = 0,
                                      val height: Int = 0,
                                      val squareCount: Int = 0,
                                      val flags: Int = 0,
+                                     val pid: Int = 0,
                                      val title: String? = null,
                                      val description: String? = null,
                                      val author: String? = null,
@@ -53,6 +54,7 @@ class Crossword internal constructor(val width: Int = 0,
             height = source.readInt(),
             squareCount = source.readInt(),
             flags = source.readInt(),
+            pid = source.readInt(),
             title = source.readString(),
             description = source.readString(),
             author = source.readString(),
@@ -92,6 +94,8 @@ class Crossword internal constructor(val width: Int = 0,
         var date: Long = 0
         @set:JvmName("flags")
         var flags: Int = 0
+        @set:JvmName("pid")
+        var dfacPid = 0
 
         val alphabet: MutableSet<Char> = HashSet(ALPHABET_ENGLISH)
         val words: MutableList<Word> = ArrayList()
@@ -153,6 +157,11 @@ class Crossword internal constructor(val width: Int = 0,
 
         fun setFlags(value: Int): Builder {
             flags = value
+            return this
+        }
+
+        fun setPid(value: Int): Builder{
+            dfacPid = value
             return this
         }
 
@@ -243,6 +252,7 @@ class Crossword internal constructor(val width: Int = 0,
                 height = height,
                 squareCount = countSquares(),
                 flags = flags,
+                pid = dfacPid,
                 title = title,
                 description = description,
                 author = author,
@@ -258,7 +268,7 @@ class Crossword internal constructor(val width: Int = 0,
                 alphabet = alphabet)
     }
 
-    fun newState(): CrosswordState = CrosswordState(width, height)
+    fun newState(): CrosswordState = CrosswordState(pid, width, height)
 
     fun previousWord(word: Word?): Word? {
         if (word != null) {
@@ -411,6 +421,7 @@ class Crossword internal constructor(val width: Int = 0,
         dest.writeInt(height)
         dest.writeInt(squareCount)
         dest.writeInt(flags)
+        dest.writeInt(pid)
         dest.writeString(title)
         dest.writeString(description)
         dest.writeString(author)

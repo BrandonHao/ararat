@@ -25,7 +25,8 @@ import android.os.Parcelable
 
 
 // FIXME inner arrays of char/attrMatrix are mutable
-class CrosswordState internal constructor(val width: Int = 0,
+class CrosswordState internal constructor(val pid: Int = 0,
+                                          val width: Int = 0,
                                           val height: Int = 0,
                                           var playTimeMillis: Long = 0,
                                           var lastPlayed: Long = 0,
@@ -141,6 +142,7 @@ class CrosswordState internal constructor(val width: Int = 0,
     companion object {
         const val FLAG_CHEATED = 0x01
         const val FLAG_MARKED  = 0x02
+        const val FLAG_CHECKED = 0x04
 
         private const val SEL_NUMBER_MASK = 0x0000fff
         private const val SEL_CHAR_MASK   = 0x0fff000
