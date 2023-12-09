@@ -870,6 +870,7 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
                 cell.setChar(sch)
                 clearCellCheck(cell)
                 resetSelection(nextSelectable(selection!!))
+
             }
 
             if (markerDisplayMode and MARKER_ERROR != 0) {
@@ -889,11 +890,11 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
 
         if (skipOccupiedOnType) {
             nextCell = firstFreeCell(word, cell + 1)
-            if (nextCell == -1 && cell + 1 < word!!.length) {
+            /*if (nextCell == -1 && cell + 1 < word!!.length) {
                 // No more free cells from this point, but we're still not
                 // at the end
                 nextCell = cell + 1
-            }
+            }*/
         } else {
             if (cell + 1 < word!!.length) nextCell = cell + 1
         }
@@ -933,6 +934,10 @@ class CrosswordView(context: Context, attrs: AttributeSet?) : View(context, attr
         var selectedCell = sel.cell
 
         val s = Selectable(sel)
+
+        if(puzzleCells[s.row][s.column]?.isFlagSet(MARKER_CHEAT)!!){
+            return
+        }
 
         if (puzzleCells[s.row][s.column]?.isEmpty == true) {
             if (selectedCell > 0) {
